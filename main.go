@@ -1,9 +1,9 @@
 package main
 
 import (
-  "geofilter/commands"
+	"geofilter/commands"
 )
 
 func main() {
-  commands.RunApp()
+	commands.RunApp()
 }
