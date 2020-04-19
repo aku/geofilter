@@ -7,9 +7,8 @@ jobs:
   build-and-push:
     executor: docker/docker
     steps:
-      - setup_remote_docker:
-          docker_layer_caching: true
       - checkout
+      - setup_remote_docker
       - docker/check
       - docker/build:
           image: akuritsyn/$CIRCLE_PROJECT_REPONAME
