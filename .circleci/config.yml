@@ -12,6 +12,7 @@ jobs:
       - docker/check
       - docker/build:
           image: akuritsyn/$CIRCLE_PROJECT_REPONAME
+          tag: 'latest'
       - docker/push:
           digest-path: /tmp/digest.txt
           image: akuritsyn/$CIRCLE_PROJECT_REPONAME
