@@ -15,6 +15,7 @@ jobs:
       - docker/push:
           digest-path: /tmp/digest.txt
           image: akuritsyn/$CIRCLE_PROJECT_REPONAME
+          tag: 'latest'
       - run:
           command: |
             echo "Digest is: $(</tmp/digest.txt)"
