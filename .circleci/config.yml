@@ -1,0 +1,31 @@
+version: 2.1
+
+orbs:
+  docker: circleci/docker@1.0.1
+
+jobs:
+  build-and-push:
+    executor: docker/docker
+    steps:
+      - setup_remote_docker:
+        docker_layer_caching: true
+      - checkout
+      - docker/check
+      - docker/build:
+          image: akuritsyn/$CIRCLE_PROJECT_REPONAME
+      - docker/push:
+          digest-path: /tmp/digest.txt
+          image: akuritsyn/$CIRCLE_PROJECT_REPONAME
+      - run:
+          command: |
+            echo "Digest is: $(</tmp/digest.txt)"
+
+workflows:
+  commit:
+    jobs:
+      - build-and-push:
+          filters:
+            branches:
+              only:
+                - master
+          context: DockerHub
