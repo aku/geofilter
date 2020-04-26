@@ -10,6 +10,8 @@ import (
 	"os"
 )
 
+const GeoHeaderName = "X-Geo-Country"
+
 type filterFunc func(string) bool
 type actionFunc func(res http.ResponseWriter)
 
@@ -35,6 +37,16 @@ func WithMessage(message string) StartOption {
 		responseData := []byte(fmt.Sprintf(tmpl, message))
 		proxy.action = func(res http.ResponseWriter) {
 			_, _ = res.Write(responseData)
+		}
+
+		return proxy, nil
+	}
+}
+
+func WithNoFilter() StartOption {
+	return func(proxy *GeoProxy) (*GeoProxy, error) {
+		proxy.filter = func(string) bool {
+			return true
 		}
 
 		return proxy, nil
@@ -119,6 +131,8 @@ func (p *GeoProxy) getHandler(db *geoip2.Reader) func(http.ResponseWriter, *http
 			p.action(res)
 			return
 		}
+
+		req.Header.Set(GeoHeaderName, country.Country.IsoCode)
 
 		serveReverseProxy(p.targetUrl, res, req)
 	}

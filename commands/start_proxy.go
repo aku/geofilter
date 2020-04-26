@@ -80,7 +80,7 @@ func getCountriesOpt(allowed string, blocked string) (proxy.StartOption, error) 
 		}
 	}
 
-	return nil, errors.New("no countries specified")
+	return proxy.WithNoFilter(), nil
 }
 
 func getMessageOpt(message string) proxy.StartOption {
@@ -105,10 +105,6 @@ func startProxy(cmd *cobra.Command, _ []string) error {
 
 	if len(allowed) > 0 && len(blocked) > 0 {
 		return errors.Errorf("--allowed and --blocked options are mutually exclusive")
-	}
-
-	if len(allowed) == 0 && len(blocked) == 0 {
-		return errors.Errorf("either --allowed or --blocked option should be specified")
 	}
 
 	countriesOpt, err := getCountriesOpt(allowed, blocked)
@@ -138,7 +134,7 @@ func init() {
 	startProxyCmd.Flags().StringP(TargetFlag, "t", "", "Target URL")
 	startProxyCmd.Flags().StringP(MessageFlag, "m", "", "Message to show when request is blocked")
 	startProxyCmd.Flags().StringP(AllowFlag, "a", "", "List of allowed countries")
-	startProxyCmd.Flags().StringP(BlockFlag, "b", "", "List of blocker countries")
+	startProxyCmd.Flags().StringP(BlockFlag, "b", "", "List of blocked countries")
 
 	_ = startProxyCmd.MarkFlagFilename(DatabaseFlag, "mmdb")
 	_ = startProxyCmd.MarkFlagRequired(TargetFlag)
