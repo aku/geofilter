@@ -13,7 +13,7 @@ import (
 const GeoHeaderName = "X-Geo-Country"
 
 type filterFunc func(string) bool
-type actionFunc func(res http.ResponseWriter)
+type actionFunc func(res http.ResponseWriter, req *http.Request)
 
 type GeoProxy struct {
 	port      uint
@@ -25,18 +25,22 @@ type GeoProxy struct {
 
 type StartOption func(*GeoProxy) (*GeoProxy, error)
 
-func WithDefault() StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
-		return proxy, nil
-	}
-}
-
 func WithMessage(message string) StartOption {
 	return func(proxy *GeoProxy) (*GeoProxy, error) {
 		const tmpl = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>%s</body></html>`
 		responseData := []byte(fmt.Sprintf(tmpl, message))
-		proxy.action = func(res http.ResponseWriter) {
+		proxy.action = func(res http.ResponseWriter, req *http.Request) {
 			_, _ = res.Write(responseData)
+		}
+
+		return proxy, nil
+	}
+}
+
+func WithRedirect(redirectUrl string) StartOption {
+	return func(proxy *GeoProxy) (*GeoProxy, error) {
+		proxy.action = func(res http.ResponseWriter, req *http.Request) {
+			http.Redirect(res, req, redirectUrl, http.StatusTemporaryRedirect)
 		}
 
 		return proxy, nil
@@ -91,7 +95,7 @@ func WithBlockedCountries(countries []string) StartOption {
 	}
 }
 
-func defaultAction(res http.ResponseWriter) {
+func defaultAction(res http.ResponseWriter, _ *http.Request) {
 	res.WriteHeader(http.StatusForbidden)
 }
 
@@ -119,7 +123,7 @@ func (p *GeoProxy) getHandler(db *geoip2.Reader) func(http.ResponseWriter, *http
 			logger.Info("can't find a country by ip",
 				zap.String("ip", ip.String()),
 			)
-			p.action(res)
+			p.action(res, req)
 			return
 		}
 
@@ -128,7 +132,7 @@ func (p *GeoProxy) getHandler(db *geoip2.Reader) func(http.ResponseWriter, *http
 			logger.Info("forbidden country",
 				zap.String("country", country.Country.Names["en"]),
 			)
-			p.action(res)
+			p.action(res, req)
 			return
 		}
 
