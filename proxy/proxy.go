@@ -2,18 +2,23 @@ package proxy
 
 import (
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sync"
 )
 
 const GeoHeaderName = "X-Geo-Country"
 
 type filterFunc func(string) bool
 type actionFunc func(res http.ResponseWriter, req *http.Request)
+type resolveCityFunc func(ipAddress net.IP) (*geoip2.Country, error)
 
 type GeoProxy struct {
 	port      uint
@@ -21,10 +26,16 @@ type GeoProxy struct {
 	targetUrl string
 	filter    filterFunc
 	action    actionFunc
+	resolve   resolveCityFunc
 	db        *geoip2.Reader
+	dbLock    *sync.RWMutex
 }
 
 type StartOption func(*GeoProxy) (*GeoProxy, error)
+
+func defaultAction(res http.ResponseWriter, _ *http.Request) {
+	res.WriteHeader(http.StatusForbidden)
+}
 
 func WithMessage(message string) StartOption {
 	return func(proxy *GeoProxy) (*GeoProxy, error) {
@@ -34,6 +45,17 @@ func WithMessage(message string) StartOption {
 			_, _ = res.Write(responseData)
 		}
 
+		return proxy, nil
+	}
+}
+
+func WithAutoReload() StartOption {
+	return func(proxy *GeoProxy) (*GeoProxy, error) {
+		if err := proxy.startWatchingDb(); err != nil {
+			return nil, err
+		}
+
+		proxy.resolve = proxy.resolveIpWithLock
 		return proxy, nil
 	}
 }
@@ -96,8 +118,65 @@ func WithBlockedCountries(countries []string) StartOption {
 	}
 }
 
-func defaultAction(res http.ResponseWriter, _ *http.Request) {
-	res.WriteHeader(http.StatusForbidden)
+func New(port uint, database string, target string, opts ...StartOption) (*GeoProxy, error) {
+	proxy := &GeoProxy{
+		port:      port,
+		dbPath:    database,
+		targetUrl: target,
+		action:    defaultAction,
+		dbLock:    new(sync.RWMutex),
+	}
+
+	for _, opt := range opts {
+		_, err := opt(proxy)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return proxy, nil
+}
+
+func loadGeoDb(path string) (*geoip2.Reader, error) {
+	db, err := geoip2.Open(path)
+	if err != nil {
+		var reason string
+		if os.IsNotExist(err) {
+			reason = fmt.Sprintf("file '%s' does not exist", path)
+		} else {
+			reason = fmt.Sprintf("failed to open '%s' file", path)
+		}
+		return nil, errors.Errorf("Can not load GeoLite database, %s\n", reason)
+	}
+
+	return db, nil
+}
+
+func (p *GeoProxy) reloadGeoDb() error {
+	newDb, err := loadGeoDb(p.dbPath)
+	if err != nil {
+	  return err
+	}
+
+	var oldDb *geoip2.Reader
+
+	p.dbLock.Lock()
+	oldDb = p.db
+	p.db = newDb
+	p.dbLock.Unlock()
+
+	return oldDb.Close()
+}
+
+func (p *GeoProxy) resolveIp(ip net.IP) (*geoip2.Country, error) {
+	return p.db.Country(ip)
+}
+
+func (p *GeoProxy) resolveIpWithLock(ip net.IP) (*geoip2.Country, error) {
+	p.dbLock.RLock()
+	defer p.dbLock.Unlock()
+
+	return p.resolveIp(ip)
 }
 
 func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
@@ -119,7 +198,7 @@ func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		country, err := p.db.Country(ip)
+		country, err := p.resolve(ip)
 		if err != nil {
 			logger.Info("can't find a country by ip",
 				zap.String("ip", ip.String()),
@@ -143,56 +222,87 @@ func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func (p *GeoProxy) loadGeoDb() error {
-	db, err := geoip2.Open(p.dbPath)
+func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
+	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		var reason string
-		if os.IsNotExist(err) {
-			reason = fmt.Sprintf("file '%s' does not exist", p.dbPath)
-		} else {
-			reason = fmt.Sprintf("failed to open '%s' file", p.dbPath)
+		return err
+	}
+	defer func () {
+		_ = watcher.Close()
+	}()
+
+	watcherWG := sync.WaitGroup{}
+	watcherWG.Add(1)
+
+	go func() {
+		for {
+			select {
+			case event, more := <-watcher.Events:
+				if !more {
+					watcherWG.Done()
+					return
+				}
+
+				realPath, _ := filepath.EvalSymlinks(p.dbPath)
+				const writeOrCreateMask = fsnotify.Write | fsnotify.Create
+				if filepath.Clean(event.Name) == realPath &&	event.Op & writeOrCreateMask != 0 {
+					err := p.reloadGeoDb()
+					if err != nil {
+						//TODO: log error
+						log.Print(err)
+					} else {
+						log.Println("Reloaded db")
+					}
+				}
+
+			case err, more := <-watcher.Errors:
+				if more { // 'Errors' channel is not closed
+					//TODO: log error
+					log.Printf("watcher error: %v\n", err)
+				}
+				watcherWG.Done()
+				return
+			}
 		}
-		return errors.Errorf("Can not load GeoLite database, %s\n", reason)
+	}()
+
+	dir := filepath.Dir(p.dbPath)
+	err = watcher.Add(dir)
+	if err != nil {
+		return err
 	}
 
-	p.db = db
+	wg.Done()
+	watcherWG.Wait()
+
 	return nil
 }
 
-func (p *GeoProxy) closeGeoDb() error {
-	if p.db != nil {
-		return p.db.Close()
-	}
+func (p *GeoProxy) startWatchingDb() error {
+	setupWG := sync.WaitGroup{}
+	setupWG.Add(1)
 
-	return nil
-}
+	var err error
+	go func() {
+		err = p.setupDbWatcher(&setupWG)
+	}()
 
-func New(port uint, database string, target string, opts ...StartOption) (*GeoProxy, error) {
-	proxy := &GeoProxy{
-		port:      port,
-		dbPath:    database,
-		targetUrl: target,
-		action:    defaultAction,
-	}
+	setupWG.Wait()
 
-	for _, opt := range opts {
-		_, err := opt(proxy)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return proxy, nil
+	return err
 }
 
 func (p *GeoProxy) Start() error {
 	//TODO: add support for DB update
-	if err := p.loadGeoDb(); err != nil {
+	db, err := loadGeoDb(p.dbPath)
+	if err != nil {
 		return err
 	}
+	p.db = db
 
+	//TODO: handle error
 	defer func() {
-		p.closeGeoDb()
+		p.db.Close()
 	}()
 
 	addr := fmt.Sprintf(":%d", p.port)

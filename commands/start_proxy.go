@@ -14,7 +14,8 @@ const (
 	DatabaseFlag = "database"
 	TargetFlag   = "target"
 	MessageFlag  = "message"
-	RedirectFlag  = "redirect"
+	RedirectFlag = "redirect"
+	WatchFlag    = "watch"
 	AllowFlag    = "allow"
 	BlockFlag    = "block"
 )
@@ -87,6 +88,7 @@ func getCountriesOpt(allowed string, blocked string) (proxy.StartOption, error) 
 func startProxy(cmd *cobra.Command, _ []string) error {
 	port, _ := cmd.Flags().GetUint(PortFlag)
 	database, _ := cmd.Flags().GetString(DatabaseFlag)
+	watch, _ := cmd.Flags().GetBool(WatchFlag)
 	target, _ := cmd.Flags().GetString(TargetFlag)
 	message, _ := cmd.Flags().GetString(MessageFlag)
 	redirect, _ := cmd.Flags().GetString(RedirectFlag)
@@ -123,6 +125,10 @@ func startProxy(cmd *cobra.Command, _ []string) error {
 		opts = append(opts, proxy.WithRedirect(redirect))
 	}
 
+	if watch {
+		opts = append(opts, proxy.WithAutoReload())
+	}
+
 	geoProxy, err := proxy.New(port, database, target,  opts...)
 	if err != nil {
 		return err
@@ -140,6 +146,7 @@ func RunApp() {
 func init() {
 	startProxyCmd.Flags().UintP(PortFlag, "p", 80, "port")
 	startProxyCmd.Flags().StringP(DatabaseFlag, "d", "GeoLite2-Country.mmdb", "Path to MaxMind database")
+	startProxyCmd.Flags().BoolP(WatchFlag, "w", false, "Watch for database file changes and reload automatically")
 	startProxyCmd.Flags().StringP(TargetFlag, "t", "", "Target URL")
 	startProxyCmd.Flags().StringP(MessageFlag, "m", "", "Message to show when request is blocked")
 	startProxyCmd.Flags().StringP(RedirectFlag, "r", "", "Redirect to the specified URL")
