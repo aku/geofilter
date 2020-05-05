@@ -21,6 +21,7 @@ type GeoProxy struct {
 	targetUrl string
 	filter    filterFunc
 	action    actionFunc
+	db        *geoip2.Reader
 }
 
 type StartOption func(*GeoProxy) (*GeoProxy, error)
@@ -99,7 +100,7 @@ func defaultAction(res http.ResponseWriter, _ *http.Request) {
 	res.WriteHeader(http.StatusForbidden)
 }
 
-func (p *GeoProxy) getHandler(db *geoip2.Reader) func(http.ResponseWriter, *http.Request) {
+func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 	logger, _ := zap.NewProduction()
 
 	defer func() {
@@ -118,7 +119,7 @@ func (p *GeoProxy) getHandler(db *geoip2.Reader) func(http.ResponseWriter, *http
 			return
 		}
 
-		country, err := db.Country(ip)
+		country, err := p.db.Country(ip)
 		if err != nil {
 			logger.Info("can't find a country by ip",
 				zap.String("ip", ip.String()),
@@ -142,6 +143,30 @@ func (p *GeoProxy) getHandler(db *geoip2.Reader) func(http.ResponseWriter, *http
 	}
 }
 
+func (p *GeoProxy) loadGeoDb() error {
+	db, err := geoip2.Open(p.dbPath)
+	if err != nil {
+		var reason string
+		if os.IsNotExist(err) {
+			reason = fmt.Sprintf("file '%s' does not exist", p.dbPath)
+		} else {
+			reason = fmt.Sprintf("failed to open '%s' file", p.dbPath)
+		}
+		return errors.Errorf("Can not load GeoLite database, %s\n", reason)
+	}
+
+	p.db = db
+	return nil
+}
+
+func (p *GeoProxy) closeGeoDb() error {
+	if p.db != nil {
+		return p.db.Close()
+	}
+
+	return nil
+}
+
 func New(port uint, database string, target string, opts ...StartOption) (*GeoProxy, error) {
 	proxy := &GeoProxy{
 		port:      port,
@@ -162,25 +187,19 @@ func New(port uint, database string, target string, opts ...StartOption) (*GeoPr
 
 func (p *GeoProxy) Start() error {
 	//TODO: add support for DB update
-	db, err := geoip2.Open(p.dbPath)
-	if err != nil {
-		var reason string
-		if os.IsNotExist(err) {
-			reason = fmt.Sprintf("file '%s' does not exist", p.dbPath)
-		} else {
-			reason = fmt.Sprintf("failed to open '%s' file", p.dbPath)
-		}
-		return errors.Errorf("Can not load GeoLite database, %s\n", reason)
+	if err := p.loadGeoDb(); err != nil {
+		return err
 	}
+
 	defer func() {
-		_ = db.Close()
+		p.closeGeoDb()
 	}()
 
 	addr := fmt.Sprintf(":%d", p.port)
 
 	log.Printf("starting server on %d\n", p.port)
 
-	handler := p.getHandler(db)
+	handler := p.getHandler()
 	http.HandleFunc("/", handler)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		return errors.Errorf("Failed to start server: %v\n", err)
