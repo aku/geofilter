@@ -6,7 +6,6 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -29,6 +28,7 @@ type GeoProxy struct {
 	resolve   resolveCityFunc
 	db        *geoip2.Reader
 	dbLock    *sync.RWMutex
+	logger    *zap.Logger
 }
 
 type StartOption func(*GeoProxy) (*GeoProxy, error)
@@ -180,18 +180,12 @@ func (p *GeoProxy) resolveIpWithLock(ip net.IP) (*geoip2.Country, error) {
 }
 
 func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
-	logger, _ := zap.NewProduction()
-
-	defer func() {
-		_ = logger.Sync()
-	}()
-
 	return func(res http.ResponseWriter, req *http.Request) {
 		addr := getRemoteAddr(req)
 		ip := getIP(addr)
 
 		if ip == nil {
-			logger.Info("can't get IP address for request",
+			p.logger.Info("can't get IP address for request",
 				zap.String("addr", addr),
 			)
 			res.WriteHeader(http.StatusBadRequest)
@@ -200,7 +194,7 @@ func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 
 		country, err := p.resolve(ip)
 		if err != nil {
-			logger.Info("can't find a country by ip",
+			p.logger.Info("can't find a country by ip",
 				zap.String("ip", ip.String()),
 			)
 			p.action(res, req)
@@ -209,7 +203,7 @@ func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 
 		allowed := p.filter(country.Country.IsoCode)
 		if allowed == false {
-			logger.Info("forbidden country",
+			p.logger.Info("forbidden country",
 				zap.String("country", country.Country.Names["en"]),
 			)
 			p.action(res, req)
@@ -240,6 +234,7 @@ func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
 			case event, more := <-watcher.Events:
 				if !more {
 					watcherWG.Done()
+					p.logger.Info("faile watcher has stopped, Geo DB will not be reloaded automatically")
 					return
 				}
 
@@ -248,17 +243,19 @@ func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
 				if filepath.Clean(event.Name) == realPath &&	event.Op & writeOrCreateMask != 0 {
 					err := p.reloadGeoDb()
 					if err != nil {
-						//TODO: log error
-						log.Print(err)
+						p.logger.Error("failed to reload Geo DB",
+							zap.Error(err),
+						)
 					} else {
-						log.Println("Reloaded db")
+						p.logger.Info("Geo DB is reloaded")
 					}
 				}
 
 			case err, more := <-watcher.Errors:
 				if more { // 'Errors' channel is not closed
-					//TODO: log error
-					log.Printf("watcher error: %v\n", err)
+					p.logger.Error("file watcher has failed, Geo DB will not be reloaded automatically",
+						zap.Error(err),
+					)
 				}
 				watcherWG.Done()
 				return
@@ -293,21 +290,28 @@ func (p *GeoProxy) startWatchingDb() error {
 }
 
 func (p *GeoProxy) Start() error {
-	//TODO: add support for DB update
+	logger, _ := zap.NewProduction()
+	defer func() {
+		_ = logger.Sync()
+	}()
+	p.logger = logger
+
 	db, err := loadGeoDb(p.dbPath)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := p.db.Close(); err != nil {
+			p.logger.Error("failed to close Geo DB")
+		}
+	}()
 	p.db = db
 
-	//TODO: handle error
-	defer func() {
-		p.db.Close()
-	}()
 
 	addr := fmt.Sprintf(":%d", p.port)
-
-	log.Printf("starting server on %d\n", p.port)
+	p.logger.Info("starting server",
+		zap.String("addr", addr),
+	)
 
 	handler := p.getHandler()
 	http.HandleFunc("/", handler)
