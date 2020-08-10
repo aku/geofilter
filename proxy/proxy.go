@@ -127,6 +127,8 @@ func New(port uint, database string, target string, opts ...StartOption) (*GeoPr
 		dbLock:    new(sync.RWMutex),
 	}
 
+	proxy.resolve = proxy.resolveIp
+
 	for _, opt := range opts {
 		_, err := opt(proxy)
 		if err != nil {
@@ -234,7 +236,7 @@ func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
 			case event, more := <-watcher.Events:
 				if !more {
 					watcherWG.Done()
-					p.logger.Info("faile watcher has stopped, Geo DB will not be reloaded automatically")
+					p.logger.Info("failed watcher has stopped, Geo DB will not be reloaded automatically")
 					return
 				}
 
