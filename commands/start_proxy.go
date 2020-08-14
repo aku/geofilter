@@ -15,6 +15,7 @@ const (
 	TargetFlag   = "target"
 	MessageFlag  = "message"
 	RedirectFlag = "redirect"
+	FileFlag     = "file"
 	WatchFlag    = "watch"
 	AllowFlag    = "allow"
 	BlockFlag    = "block"
@@ -92,6 +93,7 @@ func startProxy(cmd *cobra.Command, _ []string) error {
 	target, _ := cmd.Flags().GetString(TargetFlag)
 	message, _ := cmd.Flags().GetString(MessageFlag)
 	redirect, _ := cmd.Flags().GetString(RedirectFlag)
+	file, _ := cmd.Flags().GetString(FileFlag)
 	allowed, _ := cmd.Flags().GetString(AllowFlag)
 	blocked, _ := cmd.Flags().GetString(BlockFlag)
 
@@ -125,6 +127,11 @@ func startProxy(cmd *cobra.Command, _ []string) error {
 		opts = append(opts, proxy.WithRedirect(redirect))
 	}
 
+	file = strings.TrimSpace(file)
+	if len(file) > 0 {
+		opts = append(opts, proxy.WithFile(file))
+	}
+
 	if watch {
 		opts = append(opts, proxy.WithAutoReload())
 	}
@@ -150,6 +157,7 @@ func init() {
 	startProxyCmd.Flags().StringP(TargetFlag, "t", "", "Target URL")
 	startProxyCmd.Flags().StringP(MessageFlag, "m", "", "Message to show when request is blocked")
 	startProxyCmd.Flags().StringP(RedirectFlag, "r", "", "Redirect to the specified URL")
+	startProxyCmd.Flags().StringP(FileFlag, "f", "", "File to show when request is blocked")
 	startProxyCmd.Flags().StringP(AllowFlag, "a", "", "List of allowed countries")
 	startProxyCmd.Flags().StringP(BlockFlag, "b", "", "List of blocked countries")
 

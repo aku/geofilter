@@ -49,6 +49,15 @@ func WithMessage(message string) StartOption {
 	}
 }
 
+func WithFile(filePath string) StartOption {
+	return func(proxy *GeoProxy) (*GeoProxy, error) {
+		proxy.action = func(res http.ResponseWriter, req *http.Request) {
+			http.ServeFile(res, req, filePath)
+		}
+		return proxy, nil
+	}
+}
+
 func WithAutoReload() StartOption {
 	return func(proxy *GeoProxy) (*GeoProxy, error) {
 		if err := proxy.startWatchingDb(); err != nil {
