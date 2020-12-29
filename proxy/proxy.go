@@ -166,7 +166,7 @@ func loadGeoDb(path string) (*geoip2.Reader, error) {
 func (p *GeoProxy) reloadGeoDb() error {
 	newDb, err := loadGeoDb(p.dbPath)
 	if err != nil {
-	  return err
+		return err
 	}
 
 	var oldDb *geoip2.Reader
@@ -215,6 +215,7 @@ func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 		allowed := p.filter(country.Country.IsoCode)
 		if allowed == false {
 			p.logger.Info("forbidden country",
+				zap.String("ip", ip.String()),
 				zap.String("country", country.Country.Names["en"]),
 			)
 			p.action(res, req)
@@ -232,7 +233,7 @@ func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
 	if err != nil {
 		return err
 	}
-	defer func () {
+	defer func() {
 		_ = watcher.Close()
 	}()
 
@@ -251,7 +252,7 @@ func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
 
 				realPath, _ := filepath.EvalSymlinks(p.dbPath)
 				const writeOrCreateMask = fsnotify.Write | fsnotify.Create
-				if filepath.Clean(event.Name) == realPath &&	event.Op & writeOrCreateMask != 0 {
+				if filepath.Clean(event.Name) == realPath && event.Op&writeOrCreateMask != 0 {
 					err := p.reloadGeoDb()
 					if err != nil {
 						p.logger.Error("failed to reload Geo DB",
@@ -318,10 +319,10 @@ func (p *GeoProxy) Start() error {
 	}()
 	p.db = db
 
-
 	addr := fmt.Sprintf(":%d", p.port)
 	p.logger.Info("starting server",
 		zap.String("addr", addr),
+		zap.String("db", p.dbPath),
 	)
 
 	handler := p.getHandler()
