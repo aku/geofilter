@@ -31,6 +31,7 @@ type geoProxy struct {
 	logger    *zap.Logger
 }
 
+// StartOption defines functions used to configure a proxy server
 type StartOption func(*geoProxy) (*geoProxy, error)
 
 func defaultAction(res http.ResponseWriter, _ *http.Request) {

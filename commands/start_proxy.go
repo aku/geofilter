@@ -66,9 +66,9 @@ func getCountriesOpt(allowed string, blocked string) (proxy.StartOption, error) 
 			}
 
 			return nil, errors.Errorf("empty countries list")
-		} else {
-			return proxy.WithAllowedCountries(allowedCountries), nil
 		}
+
+		return proxy.WithAllowedCountries(allowedCountries), nil
 	}
 
 	if len(blocked) > 0 {
@@ -78,9 +78,9 @@ func getCountriesOpt(allowed string, blocked string) (proxy.StartOption, error) 
 			}
 
 			return nil, errors.Errorf("empty countries list")
-		} else {
-			return proxy.WithBlockedCountries(blockedCountries), nil
 		}
+
+		return proxy.WithBlockedCountries(blockedCountries), nil
 	}
 
 	return proxy.WithNoFilter(), nil
