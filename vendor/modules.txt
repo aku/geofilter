@@ -1,0 +1,36 @@
+# github.com/biter777/countries v1.3.1
+## explicit
+github.com/biter777/countries
+# github.com/fsnotify/fsnotify v1.4.7
+## explicit
+github.com/fsnotify/fsnotify
+# github.com/inconshreveable/mousetrap v1.0.0
+github.com/inconshreveable/mousetrap
+# github.com/oschwald/geoip2-golang v1.4.0
+## explicit
+github.com/oschwald/geoip2-golang
+# github.com/oschwald/maxminddb-golang v1.6.0
+github.com/oschwald/maxminddb-golang
+# github.com/pkg/errors v0.8.1
+## explicit
+github.com/pkg/errors
+# github.com/spf13/cobra v1.0.0
+## explicit
+github.com/spf13/cobra
+# github.com/spf13/pflag v1.0.3
+github.com/spf13/pflag
+# go.uber.org/atomic v1.6.0
+go.uber.org/atomic
+# go.uber.org/multierr v1.5.0
+go.uber.org/multierr
+# go.uber.org/zap v1.14.1
+## explicit
+go.uber.org/zap
+go.uber.org/zap/buffer
+go.uber.org/zap/internal/bufferpool
+go.uber.org/zap/internal/color
+go.uber.org/zap/internal/exit
+go.uber.org/zap/zapcore
+# golang.org/x/sys v0.0.0-20191224085550-c709ea063b76
+golang.org/x/sys/unix
+golang.org/x/sys/windows
