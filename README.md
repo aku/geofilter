@@ -1,4 +1,4 @@
-[![aku](https://circleci.com/gh/aku/geofilter.svg?style=svg)](https://circleci.com/gh/aku/geofilter)
+[![aku](https://circleci.com/gh/aku/geofilter.svg?style=svg&kill_cache=1)](https://circleci.com/gh/aku/geofilter)
 [![Go Report Card](https://goreportcard.com/badge/github.com/aku/geofilter?kill_cache=1)](https://goreportcard.com/report/github.com/aku/geofilter)
 ![Docker Image Version (tag latest semver)](https://img.shields.io/docker/v/akuritsyn/geofilter/latest?label=Docker%20Hub)
 
