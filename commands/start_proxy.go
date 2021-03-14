@@ -10,15 +10,15 @@ import (
 )
 
 const (
-	PortFlag     = "port"
-	DatabaseFlag = "database"
-	TargetFlag   = "target"
-	MessageFlag  = "message"
-	RedirectFlag = "redirect"
-	FileFlag     = "file"
-	WatchFlag    = "watch"
-	AllowFlag    = "allow"
-	BlockFlag    = "block"
+	portFlag     = "port"
+	databaseFlag = "database"
+	targetFlag   = "target"
+	messageFlag  = "message"
+	redirectFlag = "redirect"
+	fileFlag     = "file"
+	watchFlag    = "watch"
+	allowFlag    = "allow"
+	blockFlag    = "block"
 )
 
 var startProxyCmd = &cobra.Command{
@@ -63,9 +63,9 @@ func getCountriesOpt(allowed string, blocked string) (proxy.StartOption, error) 
 		if len(allowedCountries) == 0 {
 			if len(unknownCountries) == 0 {
 				return nil, errors.Errorf("unknown country names: %v\n", unknownCountries)
-			} else {
-				return nil, errors.Errorf("empty countries list")
 			}
+
+			return nil, errors.Errorf("empty countries list")
 		} else {
 			return proxy.WithAllowedCountries(allowedCountries), nil
 		}
@@ -75,9 +75,9 @@ func getCountriesOpt(allowed string, blocked string) (proxy.StartOption, error) 
 		if len(blockedCountries) == 0 {
 			if len(unknownCountries) == 0 {
 				return nil, errors.Errorf("unknown country names: %v\n", unknownCountries)
-			} else {
-				return nil, errors.Errorf("empty countries list")
 			}
+
+			return nil, errors.Errorf("empty countries list")
 		} else {
 			return proxy.WithBlockedCountries(blockedCountries), nil
 		}
@@ -87,25 +87,25 @@ func getCountriesOpt(allowed string, blocked string) (proxy.StartOption, error) 
 }
 
 func startProxy(cmd *cobra.Command, _ []string) error {
-	port, _ := cmd.Flags().GetUint(PortFlag)
-	database, _ := cmd.Flags().GetString(DatabaseFlag)
-	watch, _ := cmd.Flags().GetBool(WatchFlag)
-	target, _ := cmd.Flags().GetString(TargetFlag)
-	message, _ := cmd.Flags().GetString(MessageFlag)
-	redirect, _ := cmd.Flags().GetString(RedirectFlag)
-	file, _ := cmd.Flags().GetString(FileFlag)
-	allowed, _ := cmd.Flags().GetString(AllowFlag)
-	blocked, _ := cmd.Flags().GetString(BlockFlag)
+	port, _ := cmd.Flags().GetUint(portFlag)
+	database, _ := cmd.Flags().GetString(databaseFlag)
+	watch, _ := cmd.Flags().GetBool(watchFlag)
+	target, _ := cmd.Flags().GetString(targetFlag)
+	message, _ := cmd.Flags().GetString(messageFlag)
+	redirect, _ := cmd.Flags().GetString(redirectFlag)
+	file, _ := cmd.Flags().GetString(fileFlag)
+	allowed, _ := cmd.Flags().GetString(allowFlag)
+	blocked, _ := cmd.Flags().GetString(blockFlag)
 
 	allowed = strings.TrimSpace(allowed)
 	blocked = strings.TrimSpace(blocked)
 
 	if len(allowed) > 0 && len(blocked) > 0 {
-		return errors.Errorf("--%s and --%s options are mutually exclusive", AllowFlag, BlockFlag)
+		return errors.Errorf("--%s and --%s options are mutually exclusive", allowFlag, blockFlag)
 	}
 
 	if len(message) > 0 && len(redirect) > 0 {
-		return errors.Errorf("--%s and --%s options are mutually exclusive", RedirectFlag, MessageFlag)
+		return errors.Errorf("--%s and --%s options are mutually exclusive", redirectFlag, messageFlag)
 	}
 
 	countriesOpt, err := getCountriesOpt(allowed, blocked)
@@ -136,7 +136,7 @@ func startProxy(cmd *cobra.Command, _ []string) error {
 		opts = append(opts, proxy.WithAutoReload())
 	}
 
-	geoProxy, err := proxy.New(port, database, target,  opts...)
+	geoProxy, err := proxy.New(port, database, target, opts...)
 	if err != nil {
 		return err
 	}
@@ -144,6 +144,7 @@ func startProxy(cmd *cobra.Command, _ []string) error {
 	return geoProxy.Start()
 }
 
+// RunApp starts a proxy
 func RunApp() {
 	if err := startProxyCmd.Execute(); err != nil {
 		log.Fatal(err)
@@ -151,16 +152,16 @@ func RunApp() {
 }
 
 func init() {
-	startProxyCmd.Flags().UintP(PortFlag, "p", 80, "port")
-	startProxyCmd.Flags().StringP(DatabaseFlag, "d", "GeoLite2-Country.mmdb", "Path to MaxMind database")
-	startProxyCmd.Flags().BoolP(WatchFlag, "w", false, "Watch for database file changes and reload automatically")
-	startProxyCmd.Flags().StringP(TargetFlag, "t", "", "Target URL")
-	startProxyCmd.Flags().StringP(MessageFlag, "m", "", "Message to show when request is blocked")
-	startProxyCmd.Flags().StringP(RedirectFlag, "r", "", "Redirect to the specified URL")
-	startProxyCmd.Flags().StringP(FileFlag, "f", "", "File to show when request is blocked")
-	startProxyCmd.Flags().StringP(AllowFlag, "a", "", "List of allowed countries")
-	startProxyCmd.Flags().StringP(BlockFlag, "b", "", "List of blocked countries")
+	startProxyCmd.Flags().UintP(portFlag, "p", 80, "port")
+	startProxyCmd.Flags().StringP(databaseFlag, "d", "GeoLite2-Country.mmdb", "Path to MaxMind database")
+	startProxyCmd.Flags().BoolP(watchFlag, "w", false, "Watch for database file changes and reload automatically")
+	startProxyCmd.Flags().StringP(targetFlag, "t", "", "Target URL")
+	startProxyCmd.Flags().StringP(messageFlag, "m", "", "Message to show when request is blocked")
+	startProxyCmd.Flags().StringP(redirectFlag, "r", "", "Redirect to the specified URL")
+	startProxyCmd.Flags().StringP(fileFlag, "f", "", "File to show when request is blocked")
+	startProxyCmd.Flags().StringP(allowFlag, "a", "", "List of allowed countries")
+	startProxyCmd.Flags().StringP(blockFlag, "b", "", "List of blocked countries")
 
-	_ = startProxyCmd.MarkFlagFilename(DatabaseFlag, "mmdb")
-	_ = startProxyCmd.MarkFlagRequired(TargetFlag)
+	_ = startProxyCmd.MarkFlagFilename(databaseFlag, "mmdb")
+	_ = startProxyCmd.MarkFlagRequired(targetFlag)
 }

@@ -13,13 +13,13 @@ import (
 	"sync"
 )
 
-const GeoHeaderName = "X-Geo-Country"
+const geoHeaderName = "X-Geo-Country"
 
 type filterFunc func(string) bool
 type actionFunc func(res http.ResponseWriter, req *http.Request)
 type resolveCityFunc func(ipAddress net.IP) (*geoip2.Country, error)
 
-type GeoProxy struct {
+type geoProxy struct {
 	port      uint
 	dbPath    string
 	targetUrl string
@@ -31,14 +31,15 @@ type GeoProxy struct {
 	logger    *zap.Logger
 }
 
-type StartOption func(*GeoProxy) (*GeoProxy, error)
+type StartOption func(*geoProxy) (*geoProxy, error)
 
 func defaultAction(res http.ResponseWriter, _ *http.Request) {
 	res.WriteHeader(http.StatusForbidden)
 }
 
+// WithMessage is used to configure a proxy to make it return a message when request is blocked.
 func WithMessage(message string) StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
+	return func(proxy *geoProxy) (*geoProxy, error) {
 		const tmpl = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>%s</body></html>`
 		responseData := []byte(fmt.Sprintf(tmpl, message))
 		proxy.action = func(res http.ResponseWriter, req *http.Request) {
@@ -49,8 +50,9 @@ func WithMessage(message string) StartOption {
 	}
 }
 
+// WithFile is used to configure a proxy to make it return a file content when request is blocked.
 func WithFile(filePath string) StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
+	return func(proxy *geoProxy) (*geoProxy, error) {
 		proxy.action = func(res http.ResponseWriter, req *http.Request) {
 			http.ServeFile(res, req, filePath)
 		}
@@ -58,8 +60,9 @@ func WithFile(filePath string) StartOption {
 	}
 }
 
+// WithAutoReload is used to configure a proxy to automatically reload when GeoIP database is updated.
 func WithAutoReload() StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
+	return func(proxy *geoProxy) (*geoProxy, error) {
 		if err := proxy.startWatchingDb(); err != nil {
 			return nil, err
 		}
@@ -69,8 +72,9 @@ func WithAutoReload() StartOption {
 	}
 }
 
+// WithRedirect is used to configure a proxy to redirect a client to the specified URL when request is blocked.
 func WithRedirect(redirectUrl string) StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
+	return func(proxy *geoProxy) (*geoProxy, error) {
 		proxy.action = func(res http.ResponseWriter, req *http.Request) {
 			http.Redirect(res, req, redirectUrl, http.StatusTemporaryRedirect)
 		}
@@ -79,8 +83,10 @@ func WithRedirect(redirectUrl string) StartOption {
 	}
 }
 
+// WithNoFilter is used by default when no other options are specified.
+// It acts as a no-op and does not block any requests.
 func WithNoFilter() StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
+	return func(proxy *geoProxy) (*geoProxy, error) {
 		proxy.filter = func(string) bool {
 			return true
 		}
@@ -89,8 +95,10 @@ func WithNoFilter() StartOption {
 	}
 }
 
+// WithAllowedCountries is used to configure a proxy to allow requests coming form a list of specified countries.
+// All other requests will be blocked.
 func WithAllowedCountries(countries []string) StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
+	return func(proxy *geoProxy) (*geoProxy, error) {
 		if len(countries) == 0 {
 			return nil, errors.New("allowed countries are not specified")
 		}
@@ -108,8 +116,10 @@ func WithAllowedCountries(countries []string) StartOption {
 	}
 }
 
+// WithBlockedCountries is used to configure a proxy to block requests coming form a list of specified countries.
+// All other requests will be allowed.
 func WithBlockedCountries(countries []string) StartOption {
-	return func(proxy *GeoProxy) (*GeoProxy, error) {
+	return func(proxy *geoProxy) (*geoProxy, error) {
 		if len(countries) == 0 {
 			return nil, errors.New("blocked countries are not specified")
 		}
@@ -127,8 +137,9 @@ func WithBlockedCountries(countries []string) StartOption {
 	}
 }
 
-func New(port uint, database string, target string, opts ...StartOption) (*GeoProxy, error) {
-	proxy := &GeoProxy{
+// New is used to create a new instance of geoProxy
+func New(port uint, database string, target string, opts ...StartOption) (*geoProxy, error) {
+	proxy := &geoProxy{
 		port:      port,
 		dbPath:    database,
 		targetUrl: target,
@@ -163,7 +174,7 @@ func loadGeoDb(path string) (*geoip2.Reader, error) {
 	return db, nil
 }
 
-func (p *GeoProxy) reloadGeoDb() error {
+func (p *geoProxy) reloadGeoDb() error {
 	newDb, err := loadGeoDb(p.dbPath)
 	if err != nil {
 		return err
@@ -179,18 +190,18 @@ func (p *GeoProxy) reloadGeoDb() error {
 	return oldDb.Close()
 }
 
-func (p *GeoProxy) resolveIp(ip net.IP) (*geoip2.Country, error) {
+func (p *geoProxy) resolveIp(ip net.IP) (*geoip2.Country, error) {
 	return p.db.Country(ip)
 }
 
-func (p *GeoProxy) resolveIpWithLock(ip net.IP) (*geoip2.Country, error) {
+func (p *geoProxy) resolveIpWithLock(ip net.IP) (*geoip2.Country, error) {
 	p.dbLock.RLock()
 	defer p.dbLock.Unlock()
 
 	return p.resolveIp(ip)
 }
 
-func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
+func (p *geoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 	return func(res http.ResponseWriter, req *http.Request) {
 		addr := getRemoteAddr(req)
 		ip := getIP(addr)
@@ -213,7 +224,7 @@ func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 		}
 
 		allowed := p.filter(country.Country.IsoCode)
-		if allowed == false {
+		if !allowed {
 			p.logger.Info("forbidden country",
 				zap.String("ip", ip.String()),
 				zap.String("country", country.Country.Names["en"]),
@@ -222,13 +233,13 @@ func (p *GeoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		req.Header.Set(GeoHeaderName, country.Country.IsoCode)
+		req.Header.Set(geoHeaderName, country.Country.IsoCode)
 
 		serveReverseProxy(p.targetUrl, res, req)
 	}
 }
 
-func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
+func (p *geoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -287,7 +298,7 @@ func (p *GeoProxy) setupDbWatcher(wg *sync.WaitGroup) error {
 	return nil
 }
 
-func (p *GeoProxy) startWatchingDb() error {
+func (p *geoProxy) startWatchingDb() error {
 	setupWG := sync.WaitGroup{}
 	setupWG.Add(1)
 
@@ -301,7 +312,7 @@ func (p *GeoProxy) startWatchingDb() error {
 	return err
 }
 
-func (p *GeoProxy) Start() error {
+func (p *geoProxy) Start() error {
 	logger, _ := zap.NewProduction()
 	defer func() {
 		_ = logger.Sync()
