@@ -202,7 +202,14 @@ func (p *geoProxy) resolveIpWithLock(ip net.IP) (*geoip2.Country, error) {
 	return p.resolveIp(ip)
 }
 
-func (p *geoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
+func (p *geoProxy) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
+	p.logger.Error("proxy error",
+		zap.String("error", err.Error()),
+	)
+	rw.WriteHeader(http.StatusBadGateway)
+}
+
+func (p *geoProxy) getRequestHandler() func(http.ResponseWriter, *http.Request) {
 	return func(res http.ResponseWriter, req *http.Request) {
 		addr := getRemoteAddr(req)
 		ip := getIP(addr)
@@ -236,7 +243,7 @@ func (p *geoProxy) getHandler() func(http.ResponseWriter, *http.Request) {
 
 		req.Header.Set(geoHeaderName, country.Country.IsoCode)
 
-		serveReverseProxy(p.targetUrl, res, req)
+		serveReverseProxy(p.targetUrl, res, req, p.errorHandler)
 	}
 }
 
@@ -313,6 +320,7 @@ func (p *geoProxy) startWatchingDb() error {
 	return err
 }
 
+// Start launches a proxy server
 func (p *geoProxy) Start() error {
 	logger, _ := zap.NewProduction()
 	defer func() {
@@ -337,7 +345,7 @@ func (p *geoProxy) Start() error {
 		zap.String("db", p.dbPath),
 	)
 
-	handler := p.getHandler()
+	handler := p.getRequestHandler()
 	http.HandleFunc("/", handler)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		return errors.Errorf("Failed to start server: %v\n", err)

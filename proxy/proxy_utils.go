@@ -7,6 +7,8 @@ import (
 	"net/url"
 )
 
+type errorHandler func(http.ResponseWriter, *http.Request, error)
+
 func getRemoteAddr(r *http.Request) string {
 	forwarded := r.Header.Get("X-Forwarded-For")
 	if forwarded != "" {
@@ -32,10 +34,12 @@ func getIP(addr string) net.IP {
 	return ip
 }
 
-func serveReverseProxy(target string, res http.ResponseWriter, req *http.Request) {
+func serveReverseProxy(target string, res http.ResponseWriter, req *http.Request, errHandler errorHandler) {
 	targetUrl, _ := url.Parse(target)
 
 	proxy := httputil.NewSingleHostReverseProxy(targetUrl)
+
+	proxy.ErrorHandler = errHandler
 
 	// Update the headers to allow for SSL redirection
 	req.URL.Host = targetUrl.Host
