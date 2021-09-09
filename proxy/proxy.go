@@ -203,7 +203,7 @@ func (p *geoProxy) resolveIpWithLock(ip net.IP) (*geoip2.Country, error) {
 }
 
 func (p *geoProxy) errorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
-	p.logger.Error("proxy error",
+	p.logger.Warn("proxy error",
 		zap.String("error", err.Error()),
 	)
 	rw.WriteHeader(http.StatusBadGateway)
